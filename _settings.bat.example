@@ -1,0 +1,17 @@
+@echo off
+REM ============================================================
+REM  SHARED CONNECTION SETTINGS  (template)
+REM ------------------------------------------------------------
+REM  Copy this file to _settings.bat (without .example) and edit
+REM  the values for your environment. _settings.bat is gitignored.
+REM ============================================================
+
+set SERVER=10.10.10.115
+set COMPANYDB=SBO_SDA_(Test)_Pre_Training
+set DBUSER=sa
+set DBPASSWORD=YourPasswordHere
+
+REM Root folder containing the .rpt files. Used by RunImport.bat /
+REM RunImport-Single.bat -- the RPT_Folder column in RPT_Import_Map.xlsx
+REM is resolved relative to this path.
+set RPTROOT=C:\SDA\SDA\Form-Layout

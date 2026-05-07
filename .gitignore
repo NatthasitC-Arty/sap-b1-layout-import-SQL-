@@ -1,0 +1,12 @@
+# Local connection settings -- contains password, never commit
+_settings.bat
+
+# Runtime log
+Import_SQL_Log.txt
+
+# Local DB backups created by Backup-RDOC.ps1
+Backups/*.bak
+Backups/*.csv
+
+# Claude Code working metadata (worktrees, logs, settings)
+.claude/
