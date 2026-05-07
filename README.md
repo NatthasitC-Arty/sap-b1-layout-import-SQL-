@@ -78,8 +78,7 @@ ImportLayouts/
 │
 ├── 🔧 .bat files (double-click ได้)
 │   ├── TestConnect.bat             ← ทดสอบต่อ DB
-│   ├── RunImport.bat               ← import ทั้งหมดจาก Excel
-│   ├── RunImport-Single.bat        ← import ทีละไฟล์ (ถาม keyword)
+│   ├── RunImport.bat               ← import จาก Excel (เลือก: ทั้งหมด / ตาม keyword)
 │   ├── RunRollback.bat             ← ลบที่ import จาก Excel
 │   └── RunDeleteNonSystem.bat      ← ลบทุก non-system layout
 │
@@ -87,7 +86,7 @@ ImportLayouts/
 │   ├── Test-SQLConnect.ps1         ← logic ทดสอบ DB
 │   ├── Backup-RDOC.ps1             ← backup table RDOC
 │   ├── Import_SQL_Direct.ps1       ← ⭐ script หลัก
-│   ├── Rollback-FromExcel.ps1      ← logic rollback
+│   ├── Rollback-BySelection.ps1    ← logic rollback (list + เลือก)
 │   ├── Delete-NonSystemLayouts.ps1 ← logic delete non-system
 │   └── Restore-SystemLayouts.ps1   ← restore system จาก DB อื่น
 │
@@ -142,7 +141,7 @@ set RPTROOT=C:\SDA\SDA\Form-Layout ← root folder ที่มีไฟล์ .
 
 ใน `Run*.bat` แต่ละไฟล์มีตั้งค่าเฉพาะของตัวเองเพิ่มเติม (บนสุด หลัง `call _settings.bat`):
 ```bat
-set AUTHOR=manager       ← RunImport / RunImport-Single / RunRollback
+set AUTHOR=manager       ← RunImport / RunRollback
 set MODE=                ← -DryRun / ว่าง / -Force
 set ONDUP=Update         ← RunImport เท่านั้น
 ```
@@ -186,14 +185,14 @@ set MODE=-DryRun       REM ครั้งแรก preview ก่อน
 set ONDUP=Update       REM overwrite ของเดิมที่ชื่อซ้ำ
 ```
 
-**ดับเบิลคลิก** → ดูผล → ถ้า OK:
+**ดับเบิลคลิก** → เลือกไฟล์ Excel → ตอบ `1` ที่หน้าเมนู (Import ALL) → ดูผล
 
-แก้เป็น:
+ถ้า OK แก้เป็น:
 ```bat
 set MODE=               REM ว่าง = run จริง
 ```
 
-**ดับเบิลคลิกอีกครั้ง** → รอ 10-15 วินาที
+**ดับเบิลคลิกอีกครั้ง** → ตอบ `1` → รอ 10-15 วินาที
 
 **ผลลัพธ์ที่คาดหวัง:**
 ```
@@ -211,15 +210,15 @@ INSERT [  3] 2.Sale Quotation BOM EN...-> DocCode=QUT20008
 
 ---
 
-### 🔹 Workflow B: Import ทีละไฟล์
+### 🔹 Workflow B: Import ทีละไฟล์ (ตาม keyword)
 
-**ดับเบิลคลิก `RunImport-Single.bat`** → พิมพ์ keyword แล้ว Enter
+**ดับเบิลคลิก `RunImport.bat`** → เลือกไฟล์ Excel → ตอบ `2` ที่หน้าเมนู (Import by KEYWORD) → พิมพ์ keyword แล้ว Enter
 
 ```
-Type keyword from filename: Journal Entry
+Type keyword (e.g. Sale Order) -- empty Enter to quit: Journal Entry
 ```
 
-จะ import **เฉพาะ row ที่ RPT_FileName มี keyword นั้น**
+จะ import **เฉพาะ row ที่ RPT_FileName มี keyword นั้น** แล้วถาม keyword ถัดไปวนไปเรื่อยๆ — กด Enter ว่างๆ เพื่อจบ
 
 **ตัวอย่าง keywords:**
 | พิมพ์ | Import กี่ไฟล์ |
@@ -232,26 +231,39 @@ Type keyword from filename: Journal Entry
 
 ---
 
-### 🔹 Workflow C: Rollback (ลบ layouts ที่ import)
+### 🔹 Workflow C: Rollback (เลือก layout ที่จะลบ)
 
-**เปิด `RunRollback.bat` ด้วย Notepad ตั้งค่า:**
-```bat
-set AUTHOR=manager      REM ลบเฉพาะของ Author นี้
-set MODE=-DryRun        REM preview ก่อน
+**ดับเบิลคลิก `RunRollback.bat`** → script จะ list layout ทั้งหมดที่ไม่ใช่ system (`Author<>'System'`) ให้เลือก
+
+```
+Filter by DocName/Author keyword (empty=show all): [Enter ว่าง = แสดงทั้งหมด, หรือพิมพ์ keyword กรองก่อน]
+
+=== 42 layout(s) found ===
+ #  DocCode  TypeCode Author  DocName
+ -  -------  -------- ------  -------
+ 1  INV20007 INV2     manager AR Invoice - SDA
+ 2  INV20008 INV2     manager AR Invoice - SDA EN
+ 3  RDR20009 RDR2     SDA     Sale Order_ใบสั่งขาย_(Bom)
+ ...
+
+Enter selection: 1,3,5
+   หรือ  1-10
+   หรือ  1-5,8,12-15
+   หรือ  all
+   หรือ  Enter ว่าง = ยกเลิก
 ```
 
-**ดับเบิลคลิก** → ดูรายการที่จะลบ
+ตอบยืนยัน `yes` ก่อน script จะลบ (พร้อม children ใน RITM/RDC1/RCON และ DFLT_PRNTING orphans, ทั้งหมดอยู่ใน transaction เดียวกัน)
 
-ถ้า OK แก้เป็น:
+**Options ใน `RunRollback.bat`:**
 ```bat
-set MODE=               REM จะถาม "yes" ก่อนลบ
-REM หรือ
+set MODE=-DryRun        REM preview การเลือกอย่างเดียว ไม่ลบจริง
+set MODE=               REM ลบจริง ถาม "yes" ก่อน
 set MODE=-Force         REM ลบทันที ไม่ถาม
+set SYSTEMAUTHOR=System REM Author ที่ป้องกันไว้ (เช็คด้วย SELECT DISTINCT Author FROM RDOC)
 ```
 
-**ดับเบิลคลิกอีกครั้ง** → ลบจริง
-
-**กฎการลบ:** match ด้วย `DocName + TypeCode` (ไม่สน Author) — ลบทุก row ที่ตรงทั้งของตัวเองและของคนอื่น
+**ความปลอดภัย:** layout ที่ `Author='System'` (ของ SAP) จะไม่ถูกแสดงในลิสต์เลย ลบไม่ได้ผ่าน flow นี้
 
 ---
 
@@ -317,7 +329,7 @@ cd C:\SDA\SDA\Form-Layout\ImportLayouts
 | 1470000113 | Purchase Request | PRQ2 |
 | 162 | Inv Revaluation | ❌ unmapped (skip) |
 
-**ถ้าต้องการเพิ่ม ObjectType:** แก้ hash map `$TypeCodeMap` ใน `Import_SQL_Direct.ps1` และ `Rollback-FromExcel.ps1`
+**ถ้าต้องการเพิ่ม ObjectType:** แก้ hash map `$TypeCodeMap` ใน `Import_SQL_Direct.ps1` (Rollback ใช้การเลือกจาก DocCode ตรงๆ ไม่ต้องแก้)
 
 ---
 
@@ -387,7 +399,7 @@ set RPTROOT=...
 ### Import แล้วมี layout ซ้ำ 2 ตัว
 - เกิดเมื่อ `DocName` ต่างกันแต่เป็นไฟล์เดียวกัน
 - ตรวจ: ก่อนหน้าเคย import ด้วย Author อื่น/ชื่ออื่นหรือไม่
-- แก้: ใช้ `Rollback-FromExcel.ps1` ลบรอบเก่า แล้ว import ใหม่
+- แก้: ใช้ `RunRollback.bat` เลือก row เก่า ลบทิ้ง แล้ว import ใหม่
 
 ### SKIP "unmapped ObjectType=162"
 - Inventory Revaluation ไม่มี RTYP.CODE (ของ SAP จัดการแบบ custom)
@@ -534,9 +546,9 @@ Main script dot-sources plugin:
 # Backup DB เฉพาะตอนนี้
 .\Backup-RDOC.ps1 -Server 10.10.10.115 -CompanyDB SBO_PROD -DBPassword "xxx"
 
-# Rollback จาก Excel
-.\Rollback-FromExcel.ps1 -Author manager -DryRun
-.\Rollback-FromExcel.ps1 -Author manager -Force
+# Rollback แบบเลือก (list + pick)
+.\Rollback-BySelection.ps1 -Server 10.10.10.115 -CompanyDB SBO_PROD -DBPassword "xxx" -DryRun
+.\Rollback-BySelection.ps1 -Server 10.10.10.115 -CompanyDB SBO_PROD -DBPassword "xxx" -Filter "Sale Order"
 ```
 
 ---

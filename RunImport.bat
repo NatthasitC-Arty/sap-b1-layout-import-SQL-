@@ -3,6 +3,10 @@ chcp 65001 >nul
 REM ============================================================
 REM  Import Crystal Layouts to SAP B1 (SQL Direct)
 REM  Connection settings are in _settings.bat (shared, gitignored).
+REM
+REM  Choose at runtime:
+REM    1 = Import ALL rows from the mapping file
+REM    2 = Import by KEYWORD (filter by RPT_FileName, loop)
 REM ============================================================
 if not exist "%~dp0_settings.bat" (
     echo ERROR: _settings.bat not found.
@@ -74,9 +78,26 @@ if "%MAPFILE%"=="" (
     pause
     exit /b
 )
+
 echo.
 echo ============================================
-echo  SAP B1 Layout Import
+echo  Choose import mode:
+echo    1. Import ALL rows in mapping file
+echo    2. Import by KEYWORD (filter by RPT_FileName, loop)
+echo ============================================
+set /p MODECHOICE=Enter 1 or 2:
+
+if "%MODECHOICE%"=="1" goto IMPORT_ALL
+if "%MODECHOICE%"=="2" goto IMPORT_KEYWORD
+echo Invalid selection.
+pause
+endlocal
+exit /b
+
+:IMPORT_ALL
+echo.
+echo ============================================
+echo  SAP B1 Layout Import (ALL)
 echo  Server   : %SERVER%
 echo  Database : %COMPANYDB%
 echo  MapFile  : !MAPFILE!
@@ -98,6 +119,52 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Import_SQL
     -UseFileNameAsDocName ^
     -OnDuplicate %ONDUP% ^
     %MODE%
+
+goto END
+
+:IMPORT_KEYWORD
+echo.
+echo ============================================
+echo  SAP B1 Layout Import (BY KEYWORD)
+echo  Server   : %SERVER%
+echo  Database : %COMPANYDB%
+echo  MapFile  : !MAPFILE!
+echo  RptRoot  : !RPT!
+echo  Mode     : %MODE% (empty=real run)
+echo  OnDup    : %ONDUP%
+echo ============================================
+
+:KEYWORD_LOOP
+echo.
+set "FILTER="
+set /p FILTER=Type keyword (e.g. Sale Order) -- empty Enter to quit:
+
+if "%FILTER%"=="" goto END
+
+echo.
+echo Importing rows matching "%FILTER%" ...
+echo.
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Import_SQL_Direct.ps1" ^
+    -Server "%SERVER%" ^
+    -CompanyDB "%COMPANYDB%" ^
+    -DBUser "%DBUSER%" ^
+    -DBPassword "%DBPASSWORD%" ^
+    -Author "%AUTHOR%" ^
+    -MapFile "!CFG!\!MAPFILE!" ^
+    -RptRoot "!RPT!" ^
+    -FilterFileName "%FILTER%" ^
+    -UseFileNameAsDocName ^
+    -OnDuplicate %ONDUP% ^
+    %MODE%
+
+echo.
+echo ============================================
+echo  Done. Type next keyword, or empty Enter to quit.
+echo ============================================
+goto KEYWORD_LOOP
+
+:END
 endlocal
 
 echo.
