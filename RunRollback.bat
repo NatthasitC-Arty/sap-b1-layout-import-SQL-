@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================
-REM  Rollback Crystal Layouts: list non-system layouts, pick which to delete.
+REM  Rollback Crystal Layouts (HANA): list non-system layouts, pick which to delete.
 REM  Connection settings are in _settings.bat (shared, gitignored).
 REM ============================================================
 if not exist "%~dp0_settings.bat" (
@@ -28,9 +28,9 @@ REM ============================================================
 set SYSTEMAUTHOR=System
 
 echo ============================================
-echo  Rollback Layouts (by selection)
+echo  Rollback Layouts (by selection, HANA)
 echo  Server   : %SERVER%
-echo  Database : %COMPANYDB%
+echo  Schema   : %COMPANYDB%
 echo  KeepAuth : %SYSTEMAUTHOR%
 echo  Mode     : %MODE%
 echo ============================================

@@ -24,9 +24,9 @@ REM ============================================================
 set MODE=
 
 echo ============================================
-echo  Delete NON-SYSTEM Layouts from RDOC
+echo  Delete NON-SYSTEM Layouts from RDOC (HANA)
 echo  Server      : %SERVER%
-echo  Database    : %COMPANYDB%
+echo  Schema      : %COMPANYDB%
 echo  Keep Author : %SYSTEMAUTHOR%
 echo  Mode        : %MODE%
 echo ============================================

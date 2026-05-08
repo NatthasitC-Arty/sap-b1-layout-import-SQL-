@@ -8,5 +8,8 @@ Import_SQL_Log.txt
 Backups/*.bak
 Backups/*.csv
 
+# Local .xlsx backups created when re-saving the mapping file
+Config/*.bak
+
 # Claude Code working metadata (worktrees, logs, settings)
 .claude/

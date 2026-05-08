@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================
-REM  Import Crystal Layouts to SAP B1 (SQL Direct)
+REM  Import Crystal Layouts to SAP B1 (HANA, SQL Direct)
 REM  Connection settings are in _settings.bat (shared, gitignored).
 REM
 REM  Choose at runtime:
@@ -30,10 +30,10 @@ REM ============================================================
 set MODE=
 
 REM ============================================================
-REM  ONDUP: how to handle duplicate layouts (DocName+TypeCode match, Author ignored)
-REM    Update  = overwrite existing (recommended, default)
-REM    Skip    = leave existing alone, only insert new
-REM    Insert  = always insert new row (creates duplicates - careful!)
+REM  ONDUP: how to handle layouts that already exist (matched by DocCode PK)
+REM    Update  = overwrite Template/RptHash/DocName (recommended, default)
+REM    Skip    = leave existing alone, only INSERT new
+REM  Existing rows with Author='System' are always skipped (safety guard).
 REM ============================================================
 set ONDUP=Update
 
@@ -116,7 +116,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Import_SQL
     -Author "%AUTHOR%" ^
     -MapFile "!CFG!\!MAPFILE!" ^
     -RptRoot "!RPT!" ^
-    -UseFileNameAsDocName ^
     -OnDuplicate %ONDUP% ^
     %MODE%
 
@@ -154,7 +153,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Import_SQL
     -MapFile "!CFG!\!MAPFILE!" ^
     -RptRoot "!RPT!" ^
     -FilterFileName "%FILTER%" ^
-    -UseFileNameAsDocName ^
     -OnDuplicate %ONDUP% ^
     %MODE%
 

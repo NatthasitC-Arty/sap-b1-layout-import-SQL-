@@ -1,49 +1,63 @@
-﻿# ============================================================
-# Test SQL connection to SAP B1 Company DB
-# Verifies you can read/write RDOC table before running import
+# ============================================================
+# Test connection to SAP HANA Company tenant DB
+# Verifies you can read RDOC table before running import
 # ============================================================
 param(
-    [string]$Server     = "SLD-C072",
-    [string]$CompanyDB  = "SBO_SDA",
-    [string]$DBUser     = "sa",
-    [string]$DBPassword = "1q2w3e4r"
+    [string]$Server     = "10.10.10.109:30015",
+    [string]$CompanyDB  = "SBO_ENCONFUND_TRAINING",   # HANA schema
+    [string]$DBUser     = "SYSTEM",
+    [string]$DBPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
+. "$PSScriptRoot\DB-HANA.ps1"
 
-Write-Host "[1/4] Pinging $Server ..." -ForegroundColor Cyan
-$ping = Test-Connection -ComputerName $Server -Count 2 -Quiet -ErrorAction SilentlyContinue
-Write-Host "      Ping: $(if($ping){'OK'}else{'FAIL (server not reachable)'})" -ForegroundColor $(if($ping){'Green'}else{'Red'})
+$schemaQ = Get-DBQuoteIdent $CompanyDB
 
-Write-Host "[2/4] Testing SQL port 1433 on $Server ..." -ForegroundColor Cyan
-$tcp = Test-NetConnection -ComputerName $Server -Port 1433 -WarningAction SilentlyContinue
-Write-Host "      TCP 1433: $(if($tcp.TcpTestSucceeded){'OPEN'}else{'CLOSED/BLOCKED'})" -ForegroundColor $(if($tcp.TcpTestSucceeded){'Green'}else{'Red'})
+# ---------- 1. Reachability ----------
+$hostOnly = ($Server -split ':')[0]
+$port     = if ($Server -match ':(\d+)$') { [int]$matches[1] } else { 30015 }
 
-Write-Host "[3/4] Testing SQL connection to $CompanyDB ..." -ForegroundColor Cyan
+Write-Host "[1/4] Pinging $hostOnly ..." -ForegroundColor Cyan
+$ping = Test-Connection -ComputerName $hostOnly -Count 2 -Quiet -ErrorAction SilentlyContinue
+Write-Host "      Ping: $(if($ping){'OK'}else{'FAIL (host not reachable)'})" -ForegroundColor $(if($ping){'Green'}else{'Red'})
+
+Write-Host "[2/4] Testing TCP $port on $hostOnly ..." -ForegroundColor Cyan
+$tcp = Test-NetConnection -ComputerName $hostOnly -Port $port -WarningAction SilentlyContinue
+Write-Host "      TCP $port`: $(if($tcp.TcpTestSucceeded){'OPEN'}else{'CLOSED/BLOCKED'})" -ForegroundColor $(if($tcp.TcpTestSucceeded){'Green'}else{'Red'})
+
+# ---------- 2. HANA login ----------
+Write-Host "[3/4] Connecting to HANA schema $CompanyDB ..." -ForegroundColor Cyan
 try {
-    $cs = "Server=$Server;Database=$CompanyDB;User ID=$DBUser;Password=$DBPassword;Connection Timeout=10;"
-    $conn = New-Object System.Data.SqlClient.SqlConnection $cs
-    $conn.Open()
-    Write-Host "      SQL Login: OK (server $($conn.ServerVersion))" -ForegroundColor Green
+    $conn = New-DBConnection -Server $Server -Database $CompanyDB -User $DBUser -Password $DBPassword -Timeout 15
+    Write-Host ("      HANA Login: OK (server {0})" -f $conn.ServerVersion) -ForegroundColor Green
+} catch {
+    Write-Host ("      HANA FAIL: {0}" -f $_.Exception.Message) -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Troubleshoot:" -ForegroundColor Yellow
+    Write-Host "  - 'authentication failed'  -> wrong DBUser/DBPassword"
+    Write-Host "  - 'cannot find schema'     -> wrong CompanyDB (schema name) - check SELECT SCHEMA_NAME FROM SYS.SCHEMAS"
+    Write-Host "  - 'cannot connect'         -> wrong Server:port or HANA service down"
+    Write-Host "  - 'Sap.Data.Hana not found' -> install SAP HANA Client from SAP Marketplace"
+    return
+}
 
-    Write-Host "[4/4] Counting layouts in RDOC ..." -ForegroundColor Cyan
+# ---------- 3. RDOC counts ----------
+Write-Host "[4/4] Counting layouts in $schemaQ.RDOC ..." -ForegroundColor Cyan
+try {
     $cmd = $conn.CreateCommand()
-    $cmd.CommandText = "SELECT COUNT(*) AS Total, SUM(CASE WHEN Category='C' THEN 1 ELSE 0 END) AS Crystal, SUM(CASE WHEN Author='SDA' THEN 1 ELSE 0 END) AS SDA FROM RDOC"
-    $rdr = $cmd.ExecuteReader()
+    Set-DBCommandText $cmd "SELECT COUNT(*) AS Total, SUM(CASE WHEN Category='C' THEN 1 ELSE 0 END) AS Crystal, SUM(CASE WHEN Author='SDA' THEN 1 ELSE 0 END) AS SDA FROM $schemaQ.RDOC"
+    $rdr = Invoke-DBReader $cmd
     if ($rdr.Read()) {
-        Write-Host "      Total layouts : $($rdr['Total'])" -ForegroundColor Green
-        Write-Host "      Crystal (C)   : $($rdr['Crystal'])" -ForegroundColor Green
-        Write-Host "      Author=SDA    : $($rdr['SDA']) (imported by us)" -ForegroundColor Green
+        Write-Host ("      Total layouts : {0}" -f $rdr['Total']) -ForegroundColor Green
+        Write-Host ("      Crystal (C)   : {0}" -f $rdr['Crystal']) -ForegroundColor Green
+        Write-Host ("      Author=SDA    : {0}" -f $rdr['SDA']) -ForegroundColor Green
     }
     $rdr.Close()
-    $conn.Close()
     Write-Host ""
     Write-Host "READY TO IMPORT" -ForegroundColor Green
 } catch {
-    Write-Host "      SQL FAIL: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Troubleshoot:" -ForegroundColor Yellow
-    Write-Host "  - 'Login failed for user' -> wrong DBUser/DBPassword"
-    Write-Host "  - 'Cannot open database X' -> wrong CompanyDB name"
-    Write-Host "  - 'A network-related error' -> wrong Server name or SQL service down"
+    Write-Host ("      Query FAIL: {0}" -f $_.Exception.Message) -ForegroundColor Red
+} finally {
+    $conn.Close()
 }
