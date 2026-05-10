@@ -12,6 +12,7 @@ if not exist "%~dp0_settings.bat" (
     exit /b 1
 )
 call "%~dp0_settings.bat"
+if "%DBENGINE%"=="" set DBENGINE=MSSQL
 
 set SYSTEMAUTHOR=System
 
@@ -38,6 +39,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Delete-Non
     -CompanyDB "%COMPANYDB%" ^
     -DBUser "%DBUSER%" ^
     -DBPassword "%DBPASSWORD%" ^
+    -DBEngine "%DBENGINE%" ^
     -SystemAuthor "%SYSTEMAUTHOR%" ^
     %MODE%
 

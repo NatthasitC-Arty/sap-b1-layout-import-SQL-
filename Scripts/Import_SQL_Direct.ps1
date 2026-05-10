@@ -15,12 +15,14 @@ param(
     [ValidateSet("Update","Skip","Insert")]
     [string]$OnDuplicate = "Update",
     [string]$FilterFileName = "",
+    [ValidateSet("MSSQL","HANA")]
+    [string]$DBEngine   = "MSSQL",
     [switch]$UseFileNameAsDocName,
     [switch]$DryRun
 )
 
 # Load DB plugin
-. "$PSScriptRoot\DB-MSSQL.ps1"
+. "$PSScriptRoot\DB-$DBEngine.ps1"
 
 # ObjectType -> TypeCode (RTYP.CODE) mapping
 $TypeCodeMap = @{
@@ -165,7 +167,7 @@ $conn = New-DBConnection -Server $Server -Database $CompanyDB -User $DBUser -Pas
 # Pre-fetch max sequence per TypeCode to avoid query per row
 $maxSeqMap = @{}
 $seqCmd = $conn.CreateCommand()
-$seqCmd.CommandText = "SELECT TypeCode, MAX(CAST(SUBSTRING(DocCode, LEN(TypeCode)+1, 4) AS INT)) AS MaxSeq FROM RDOC WHERE LEN(DocCode)>=5 AND $DB_ISNUM(SUBSTRING(DocCode, LEN(TypeCode)+1, 4))=1 GROUP BY TypeCode"
+$seqCmd.CommandText = Convert-DBSql "SELECT TypeCode, MAX(CAST(SUBSTRING(DocCode, LEN(TypeCode)+1, 4) AS INT)) AS MaxSeq FROM RDOC WHERE LEN(DocCode)>=5 AND $DB_ISNUM(SUBSTRING(DocCode, LEN(TypeCode)+1, 4))=1 GROUP BY TypeCode"
 $rdr = $seqCmd.ExecuteReader()
 while ($rdr.Read()) {
     $tc = [string]$rdr["TypeCode"]

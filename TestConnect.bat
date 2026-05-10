@@ -11,12 +11,14 @@ if not exist "%~dp0_settings.bat" (
     exit /b 1
 )
 call "%~dp0_settings.bat"
+if "%DBENGINE%"=="" set DBENGINE=MSSQL
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Test-SQLConnect.ps1" ^
     -Server "%SERVER%" ^
     -CompanyDB "%COMPANYDB%" ^
     -DBUser "%DBUSER%" ^
-    -DBPassword "%DBPASSWORD%"
+    -DBPassword "%DBPASSWORD%" ^
+    -DBEngine "%DBENGINE%"
 
 echo.
 pause

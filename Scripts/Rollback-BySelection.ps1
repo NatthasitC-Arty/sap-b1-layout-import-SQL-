@@ -2,6 +2,7 @@
 # Rollback by Selection: list non-system layouts in RDOC, let user pick which to delete.
 # Optional keyword filter narrows the list before picking.
 # Deletes RITM/RDC1/RCON children + DFLT_PRNTING orphans, all in one transaction.
+# Works on MSSQL and HANA via the DB plugin.
 # ============================================================
 param(
     [Parameter(Mandatory=$true)][string]$Server,
@@ -10,21 +11,25 @@ param(
     [Parameter(Mandatory=$true)][string]$DBPassword,
     [string]$SystemAuthor = "System",
     [string]$Filter       = "",
+    [ValidateSet("MSSQL","HANA")]
+    [string]$DBEngine   = "MSSQL",
     [switch]$DryRun,
     [switch]$Force
 )
 
+# Load DB plugin
+. "$PSScriptRoot\DB-$DBEngine.ps1"
+
 Write-Host "=== Rollback by selection ===" -ForegroundColor Cyan
 Write-Host "Server      : $Server"
 Write-Host "CompanyDB   : $CompanyDB"
+Write-Host "DBEngine    : $DBEngine"
 Write-Host "Skip Author : '$SystemAuthor' (system layouts kept)"
 if ($Filter) { Write-Host "Filter      : '$Filter'" }
 Write-Host ""
 
-$cs = "Server=$Server;Database=$CompanyDB;User ID=$DBUser;Password=$DBPassword;Connection Timeout=10;"
-$conn = New-Object System.Data.SqlClient.SqlConnection $cs
 try {
-    $conn.Open()
+    $conn = New-DBConnection -Server $Server -Database $CompanyDB -User $DBUser -Password $DBPassword
 } catch {
     Write-Host "ERROR connecting: $($_.Exception.Message)" -ForegroundColor Red
     return
@@ -35,14 +40,14 @@ if (-not $Filter) {
     $Filter = Read-Host "Filter by DocName/Author keyword (empty=show all)"
 }
 
-$sql = "SELECT DocCode, DocName, TypeCode, ISNULL(Author,'') AS Author FROM RDOC WHERE (Author<>@a OR Author IS NULL)"
-if ($Filter) { $sql += " AND (DocName LIKE @f OR Author LIKE @f OR TypeCode LIKE @f)" }
+$sql = "SELECT DocCode, DocName, TypeCode, ISNULL(Author,'') AS Author FROM RDOC WHERE (Author<>${DB_PARAM}a OR Author IS NULL)"
+if ($Filter) { $sql += " AND (DocName LIKE ${DB_PARAM}f OR Author LIKE ${DB_PARAM}f OR TypeCode LIKE ${DB_PARAM}f)" }
 $sql += " ORDER BY TypeCode, DocName"
 
 $cmd = $conn.CreateCommand()
-$cmd.CommandText = $sql
-[void]$cmd.Parameters.AddWithValue("@a", $SystemAuthor)
-if ($Filter) { [void]$cmd.Parameters.AddWithValue("@f", "%$Filter%") }
+$cmd.CommandText = Convert-DBSql $sql
+Add-DBParam $cmd "${DB_PARAM}a" $SystemAuthor
+if ($Filter) { Add-DBParam $cmd "${DB_PARAM}f" "%$Filter%" }
 
 $rdr = $cmd.ExecuteReader()
 $layouts = New-Object System.Collections.ArrayList
@@ -128,7 +133,8 @@ if (-not $Force) {
     }
 }
 
-# Build #DelDocs by inlining DocCodes (avoids sp_executesql temp-table scope issue)
+# Build IN-list by inlining DocCodes (avoids sp_executesql temp-table scope issue on MSSQL,
+# and HANA doesn't support SELECT INTO #temp anyway).
 $docCodes = $selected | ForEach-Object { "'" + ($_.DocCode -replace "'","''") + "'" }
 $inList = $docCodes -join ","
 
@@ -138,7 +144,7 @@ try {
         try {
             $c = $conn.CreateCommand()
             $c.Transaction = $tran
-            $c.CommandText = "DELETE FROM dbo.$tbl WHERE DocCode IN ($inList)"
+            $c.CommandText = Convert-DBSql "DELETE FROM dbo.$tbl WHERE DocCode IN ($inList)"
             $c.CommandTimeout = 300
             $cn = $c.ExecuteNonQuery()
             Write-Host ("  {0,-4}: deleted {1,5} child rows" -f $tbl, $cn) -ForegroundColor DarkYellow
@@ -149,7 +155,7 @@ try {
 
     $exec = $conn.CreateCommand()
     $exec.Transaction = $tran
-    $exec.CommandText = "DELETE FROM RDOC WHERE DocCode IN ($inList)"
+    $exec.CommandText = Convert-DBSql "DELETE FROM RDOC WHERE DocCode IN ($inList)"
     $exec.CommandTimeout = 300
     $n = $exec.ExecuteNonQuery()
     Write-Host ("  RDOC: deleted {0,5} rows" -f $n) -ForegroundColor Green
@@ -157,7 +163,7 @@ try {
     try {
         $d = $conn.CreateCommand()
         $d.Transaction = $tran
-        $d.CommandText = "DELETE FROM dbo.DFLT_PRNTING WHERE DocCode IN ($inList)"
+        $d.CommandText = Convert-DBSql "DELETE FROM dbo.DFLT_PRNTING WHERE DocCode IN ($inList)"
         $d.CommandTimeout = 300
         $dn = $d.ExecuteNonQuery()
         Write-Host ("  DFLT_PRNTING entries cleaned: {0,5} rows" -f $dn) -ForegroundColor DarkYellow

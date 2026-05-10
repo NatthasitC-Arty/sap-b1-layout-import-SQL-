@@ -11,6 +11,7 @@ if not exist "%~dp0_settings.bat" (
     exit /b 1
 )
 call "%~dp0_settings.bat"
+if "%DBENGINE%"=="" set DBENGINE=MSSQL
 
 REM ============================================================
 REM  MODE:
@@ -41,6 +42,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Rollback-B
     -CompanyDB "%COMPANYDB%" ^
     -DBUser "%DBUSER%" ^
     -DBPassword "%DBPASSWORD%" ^
+    -DBEngine "%DBENGINE%" ^
     -SystemAuthor "%SYSTEMAUTHOR%" ^
     %MODE%
 

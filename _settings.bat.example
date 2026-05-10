@@ -6,12 +6,27 @@ REM  Copy this file to _settings.bat (without .example) and edit
 REM  the values for your environment. _settings.bat is gitignored.
 REM ============================================================
 
+REM DBENGINE = which DB plugin to load (MSSQL or HANA).
+REM   MSSQL : SAP B1 on Microsoft SQL Server (uses System.Data.SqlClient)
+REM   HANA  : SAP B1 on HANA (requires hdbclient: Sap.Data.Hana.v4.5.dll
+REM           at C:\Program Files\SAP\hdbclient\ado.net\v4.5\)
+set DBENGINE=MSSQL
+
+REM ------------------------------------------------------------
+REM  MSSQL settings example:
+REM    SERVER     = hostname or hostname\instance
+REM    COMPANYDB  = SAP B1 company database name
+REM
+REM  HANA settings example:
+REM    SERVER     = host:port  (tenant DB port is 3<NN>15, e.g. 30015)
+REM    COMPANYDB  = company SCHEMA name (e.g. SBO_ENCONFUND_TRAINING)
+REM                 find with: SELECT SCHEMA_NAME FROM SYS.SCHEMAS WHERE SCHEMA_NAME LIKE 'SBO%'
+REM ------------------------------------------------------------
 set SERVER=10.10.10.115
 set COMPANYDB=SBO_SDA_(Test)_Pre_Training
 set DBUSER=sa
 set DBPASSWORD=YourPasswordHere
 
-REM Root folder containing the .rpt files. Used by RunImport.bat /
-REM RunImport-Single.bat -- the RPT_Folder column in RPT_Import_Map.xlsx
-REM is resolved relative to this path.
+REM Root folder containing the .rpt files. The RPT_Folder column in
+REM RPT_Import_Map.xlsx is resolved relative to this path.
 set RPTROOT=C:\SDA\SDA\Form-Layout

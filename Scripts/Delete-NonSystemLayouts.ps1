@@ -3,6 +3,7 @@
 # "System" = rows where Author = 'System' (configurable via -SystemAuthor).
 # Also deletes child rows in RITM/RDC1/RCON for the deleted DocCodes
 # and clears DFLT_PRNTING orphans. All work is wrapped in a transaction.
+# Works on MSSQL and HANA via the DB plugin.
 # ============================================================
 param(
     [Parameter(Mandatory=$true)][string]$Server,
@@ -10,37 +11,43 @@ param(
     [string]$DBUser     = "sa",
     [Parameter(Mandatory=$true)][string]$DBPassword,
     [string]$SystemAuthor = "System",
+    [ValidateSet("MSSQL","HANA")]
+    [string]$DBEngine   = "MSSQL",
     [switch]$DryRun,
     [switch]$Force
 )
 
+# Load DB plugin
+. "$PSScriptRoot\DB-$DBEngine.ps1"
+
 Write-Host "=== Delete non-system layouts from RDOC ===" -ForegroundColor Cyan
 Write-Host "Server      : $Server"
 Write-Host "CompanyDB   : $CompanyDB"
+Write-Host "DBEngine    : $DBEngine"
 Write-Host "Keep Author : '$SystemAuthor'"
 Write-Host ""
 
-$cs = "Server=$Server;Database=$CompanyDB;User ID=$DBUser;Password=$DBPassword;Connection Timeout=10;"
-$conn = New-Object System.Data.SqlClient.SqlConnection $cs
 try {
-    $conn.Open()
+    $conn = New-DBConnection -Server $Server -Database $CompanyDB -User $DBUser -Password $DBPassword
 } catch {
     Write-Host "ERROR connecting: $($_.Exception.Message)" -ForegroundColor Red
     return
 }
 
-$total = ($conn.CreateCommand() | ForEach-Object { $_.CommandText = "SELECT COUNT(*) FROM RDOC"; $_.ExecuteScalar() })
+$tCmd = $conn.CreateCommand()
+$tCmd.CommandText = Convert-DBSql "SELECT COUNT(*) FROM RDOC"
+$total = $tCmd.ExecuteScalar()
 Write-Host ("RDOC total rows           : {0}" -f $total) -ForegroundColor Gray
 
 $sysCmd = $conn.CreateCommand()
-$sysCmd.CommandText = "SELECT COUNT(*) FROM RDOC WHERE Author=@a"
-[void]$sysCmd.Parameters.AddWithValue("@a", $SystemAuthor)
+$sysCmd.CommandText = Convert-DBSql "SELECT COUNT(*) FROM RDOC WHERE Author=${DB_PARAM}a"
+Add-DBParam $sysCmd "${DB_PARAM}a" $SystemAuthor
 $sysCount = $sysCmd.ExecuteScalar()
 Write-Host ("Rows with Author='$SystemAuthor' (KEEP) : {0}" -f $sysCount) -ForegroundColor Green
 
 $delCmd = $conn.CreateCommand()
-$delCmd.CommandText = "SELECT COUNT(*) FROM RDOC WHERE Author<>@a OR Author IS NULL"
-[void]$delCmd.Parameters.AddWithValue("@a", $SystemAuthor)
+$delCmd.CommandText = Convert-DBSql "SELECT COUNT(*) FROM RDOC WHERE Author<>${DB_PARAM}a OR Author IS NULL"
+Add-DBParam $delCmd "${DB_PARAM}a" $SystemAuthor
 $delCount = $delCmd.ExecuteScalar()
 Write-Host ("Rows to DELETE            : {0}" -f $delCount) -ForegroundColor Yellow
 Write-Host ""
@@ -51,21 +58,22 @@ if ($delCount -eq 0) {
     return
 }
 
-# Preview: group by Author + TypeCode
+# Preview: group by Author + TypeCode (manual reader loop, engine-agnostic)
 $prev = $conn.CreateCommand()
-$prev.CommandText = @"
-SELECT Author, TypeCode, COUNT(*) AS Cnt
-FROM RDOC
-WHERE Author<>@a OR Author IS NULL
-GROUP BY Author, TypeCode
-ORDER BY Author, TypeCode
-"@
-[void]$prev.Parameters.AddWithValue("@a", $SystemAuthor)
-$da = New-Object System.Data.SqlClient.SqlDataAdapter $prev
-$dt = New-Object System.Data.DataTable
-[void]$da.Fill($dt)
+$prev.CommandText = Convert-DBSql "SELECT Author, TypeCode, COUNT(*) AS Cnt FROM RDOC WHERE Author<>${DB_PARAM}a OR Author IS NULL GROUP BY Author, TypeCode ORDER BY Author, TypeCode"
+Add-DBParam $prev "${DB_PARAM}a" $SystemAuthor
+$rdr = $prev.ExecuteReader()
+$prevRows = New-Object System.Collections.ArrayList
+while ($rdr.Read()) {
+    [void]$prevRows.Add([PSCustomObject]@{
+        Author   = if ($rdr.IsDBNull(0)) { '<NULL>' } else { [string]$rdr[0] }
+        TypeCode = [string]$rdr[1]
+        Cnt      = $rdr[2]
+    })
+}
+$rdr.Close()
 Write-Host "=== Preview (grouped by Author + TypeCode) ===" -ForegroundColor Yellow
-$dt | Format-Table Author,TypeCode,Cnt -AutoSize
+$prevRows | Format-Table Author,TypeCode,Cnt -AutoSize
 
 if ($DryRun) {
     Write-Host "DryRun mode - no changes made." -ForegroundColor Cyan
@@ -90,8 +98,8 @@ try {
         try {
             $c = $conn.CreateCommand()
             $c.Transaction = $tran
-            $c.CommandText = "DELETE FROM dbo.$tbl WHERE DocCode IN (SELECT DocCode FROM RDOC WHERE Author<>@a OR Author IS NULL)"
-            [void]$c.Parameters.AddWithValue("@a", $SystemAuthor)
+            $c.CommandText = Convert-DBSql "DELETE FROM dbo.$tbl WHERE DocCode IN (SELECT DocCode FROM RDOC WHERE Author<>${DB_PARAM}a OR Author IS NULL)"
+            Add-DBParam $c "${DB_PARAM}a" $SystemAuthor
             $c.CommandTimeout = 300
             $cn = $c.ExecuteNonQuery()
             Write-Host ("  {0,-4}: deleted {1,5} child rows" -f $tbl, $cn) -ForegroundColor DarkYellow
@@ -103,8 +111,8 @@ try {
     # Delete RDOC parent rows
     $exec = $conn.CreateCommand()
     $exec.Transaction = $tran
-    $exec.CommandText = "DELETE FROM RDOC WHERE Author<>@a OR Author IS NULL"
-    [void]$exec.Parameters.AddWithValue("@a", $SystemAuthor)
+    $exec.CommandText = Convert-DBSql "DELETE FROM RDOC WHERE Author<>${DB_PARAM}a OR Author IS NULL"
+    Add-DBParam $exec "${DB_PARAM}a" $SystemAuthor
     $exec.CommandTimeout = 300
     $n = $exec.ExecuteNonQuery()
     Write-Host ("  RDOC: deleted {0,5} rows" -f $n) -ForegroundColor Green
@@ -113,7 +121,7 @@ try {
     try {
         $d = $conn.CreateCommand()
         $d.Transaction = $tran
-        $d.CommandText = "DELETE FROM dbo.DFLT_PRNTING WHERE DocCode IS NOT NULL AND DocCode<>N'' AND DocCode NOT IN (SELECT DocCode FROM RDOC)"
+        $d.CommandText = Convert-DBSql "DELETE FROM dbo.DFLT_PRNTING WHERE DocCode IS NOT NULL AND DocCode<>'' AND DocCode NOT IN (SELECT DocCode FROM RDOC)"
         $d.CommandTimeout = 300
         $dn = $d.ExecuteNonQuery()
         Write-Host ("  DFLT_PRNTING orphans cleaned: {0,5} rows" -f $dn) -ForegroundColor DarkYellow

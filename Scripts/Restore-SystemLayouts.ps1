@@ -11,12 +11,24 @@ param(
     [string]$DBUser       = "sa",
     [Parameter(Mandatory=$true)][string]$DBPassword,
     [string]$SystemAuthor = "System",
+    [ValidateSet("MSSQL","HANA")]
+    [string]$DBEngine     = "MSSQL",
     [switch]$DryRun,
     [switch]$Force,
     [switch]$SkipBackup
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($DBEngine -ne "MSSQL") {
+    Write-Host ""
+    Write-Host "[ABORT] Restore-SystemLayouts.ps1 supports MSSQL only." -ForegroundColor Red
+    Write-Host "        This script uses cross-database queries ([SourceDB].dbo.RDOC)," -ForegroundColor Yellow
+    Write-Host "        BACKUP DATABASE, and xp_instance_regread -- all MSSQL-only constructs." -ForegroundColor Yellow
+    Write-Host "        For HANA: copy system layouts via HANA Studio (Data Preview / SQL Console)" -ForegroundColor Yellow
+    Write-Host "        between schemas, e.g. INSERT INTO SCHEMA_TARGET.RDOC SELECT * FROM SCHEMA_SOURCE.RDOC WHERE Author='System'" -ForegroundColor Yellow
+    return
+}
 
 function New-Conn {
     param($db)

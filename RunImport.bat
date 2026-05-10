@@ -15,6 +15,7 @@ if not exist "%~dp0_settings.bat" (
     exit /b 1
 )
 call "%~dp0_settings.bat"
+if "%DBENGINE%"=="" set DBENGINE=MSSQL
 
 REM ============================================================
 REM  AUTHOR: stored on NEW rows only (INSERT). Updates to existing
@@ -113,6 +114,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Import_SQL
     -CompanyDB "%COMPANYDB%" ^
     -DBUser "%DBUSER%" ^
     -DBPassword "%DBPASSWORD%" ^
+    -DBEngine "%DBENGINE%" ^
     -Author "%AUTHOR%" ^
     -MapFile "!CFG!\!MAPFILE!" ^
     -RptRoot "!RPT!" ^
@@ -150,6 +152,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Scripts\Import_SQL
     -CompanyDB "%COMPANYDB%" ^
     -DBUser "%DBUSER%" ^
     -DBPassword "%DBPASSWORD%" ^
+    -DBEngine "%DBENGINE%" ^
     -Author "%AUTHOR%" ^
     -MapFile "!CFG!\!MAPFILE!" ^
     -RptRoot "!RPT!" ^
