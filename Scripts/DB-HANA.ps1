@@ -78,6 +78,13 @@ function Convert-DBSql {
     #    Hand-rolled because expr can contain nested parens.
     $s = ConvertTo-HanaIsNumeric $s
 
+    # 5. Quote PascalCase identifiers ("DocCode", "Author", etc.) for HANA.
+    #    SAP B1 stores its column names as mixed-case quoted identifiers; an
+    #    unquoted reference is upcased by HANA (Category -> CATEGORY) and fails
+    #    with "invalid column name". Tables (RDOC, RITM, ...) and keywords are
+    #    all-uppercase so they don't match the PascalCase heuristic.
+    $s = Add-HanaIdentifierQuotes $s
+
     return $s
 }
 
@@ -116,6 +123,82 @@ function ConvertTo-HanaIsNumeric {
             [void]$sb.Append("TRY_CAST($arg AS INT) IS NOT NULL")
             $i = $after
         }
+    }
+    return $sb.ToString()
+}
+
+# ------------------------------------------------------------
+# Wrap PascalCase identifiers in double quotes for HANA.
+# Heuristic: an identifier that starts with [A-Z] AND contains at least
+# one [a-z] is treated as a B1 mixed-case column/alias (DocCode, Author,
+# Total, ...) and gets quoted. ALL_CAPS tokens (RDOC, SELECT, FROM,
+# DFLT_PRNTING, LENGTH, COALESCE, ...) don't match and stay unquoted.
+# Skips: contents of '...' string literals, contents of "..." already-
+# quoted identifiers, and tokens immediately following ':' or '@' (named
+# parameters like :DocCode).
+# ------------------------------------------------------------
+function Add-HanaIdentifierQuotes {
+    param([string]$Sql)
+    $sb = New-Object System.Text.StringBuilder
+    $i = 0
+    while ($i -lt $Sql.Length) {
+        $ch = $Sql[$i]
+
+        # Pass through string literal '...' verbatim
+        if ($ch -eq "'") {
+            [void]$sb.Append($ch); $i++
+            while ($i -lt $Sql.Length) {
+                $c2 = $Sql[$i]
+                [void]$sb.Append($c2); $i++
+                if ($c2 -eq "'") {
+                    if ($i -lt $Sql.Length -and $Sql[$i] -eq "'") {
+                        [void]$sb.Append($Sql[$i]); $i++  # escaped ''
+                        continue
+                    }
+                    break
+                }
+            }
+            continue
+        }
+
+        # Pass through already-quoted identifier "..." verbatim
+        if ($ch -eq '"') {
+            [void]$sb.Append($ch); $i++
+            while ($i -lt $Sql.Length) {
+                $c2 = $Sql[$i]; [void]$sb.Append($c2); $i++
+                if ($c2 -eq '"') { break }
+            }
+            continue
+        }
+
+        # Identifier start
+        if (($ch -ge 'A' -and $ch -le 'Z') -or ($ch -ge 'a' -and $ch -le 'z') -or $ch -eq '_') {
+            $j = $i + 1
+            while ($j -lt $Sql.Length) {
+                $cj = $Sql[$j]
+                if ((($cj -ge 'A') -and ($cj -le 'Z')) -or
+                    (($cj -ge 'a') -and ($cj -le 'z')) -or
+                    (($cj -ge '0') -and ($cj -le '9')) -or
+                    $cj -eq '_') { $j++ } else { break }
+            }
+            $token = $Sql.Substring($i, $j - $i)
+            $prev = if ($sb.Length -gt 0) { $sb[$sb.Length - 1] } else { ' ' }
+            $isParam = ($prev -eq ':' -or $prev -eq '@')
+            $startsUpper = ($token[0] -ge 'A' -and $token[0] -le 'Z')
+            $hasLower = $false
+            for ($k = 0; $k -lt $token.Length; $k++) {
+                if ($token[$k] -ge 'a' -and $token[$k] -le 'z') { $hasLower = $true; break }
+            }
+            if ((-not $isParam) -and $startsUpper -and $hasLower) {
+                [void]$sb.Append('"').Append($token).Append('"')
+            } else {
+                [void]$sb.Append($token)
+            }
+            $i = $j
+            continue
+        }
+
+        [void]$sb.Append($ch); $i++
     }
     return $sb.ToString()
 }
