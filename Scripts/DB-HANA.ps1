@@ -16,7 +16,11 @@ function Initialize-HanaDriver {
     if (-not (Test-Path $script:HanaDllPath)) {
         throw "SAP HANA Client not found at '$script:HanaDllPath'. Install hdbclient (e.g. from SAP HANA Client setup) and retry."
     }
-    Add-Type -Path $script:HanaDllPath
+    # LoadFrom (not Add-Type -Path) because Add-Type validates every exported type
+    # via GetTypes(), which throws ReflectionTypeLoadException when the optional
+    # EntityFramework 6.0 reference (pulled in by HanaEF*) is absent. HanaConnection
+    # itself loads and runs fine without EF -- we just bypass the eager validation.
+    [void][System.Reflection.Assembly]::LoadFrom($script:HanaDllPath)
 }
 
 function New-DBConnection {
